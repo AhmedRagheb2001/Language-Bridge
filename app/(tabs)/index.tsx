@@ -1,6 +1,6 @@
 
-import { StyleSheet, Text, View, Pressable } from "react-native";
 import { useRouter } from "expo-router";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -10,7 +10,7 @@ export default function WelcomeScreen() {
       <View style={styles.card}>
         <Text style={styles.title}>Welcome to</Text>
 
-        <Text style={styles.appName}>Language Bridge</Text>
+        <Text style={styles.appName}>CypTalk</Text>
 
         <Text style={styles.subtitle}>
           Connect, communicate, and learn together.
@@ -40,7 +40,7 @@ const styles = StyleSheet.create({
   width: "100%",
   maxWidth: 380,
   height: 500,
-  backgroundColor: "#FFFFFF",
+  backgroundColor: "#FDF5E6",
   borderRadius: 24,
   padding: 32,
   alignItems: "center",

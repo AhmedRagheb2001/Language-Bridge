@@ -1,21 +1,21 @@
 
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  ScrollView,
-  Pressable,
   ActivityIndicator,
-  TouchableOpacity,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
-import { useState } from "react";
-import { useRouter } from "expo-router";
 import { Picker } from "@react-native-picker/picker";
+import { useRouter } from "expo-router";
+import { useState } from "react";
 
 import api from "@/services/api";
 
@@ -48,7 +48,7 @@ export default function CreateAcc() {
       return;
     }
 
-    // Languages are required by the backend
+    // Languages are required
     if (!nativeLang || !learnLang) {
       Alert.alert(
         "Missing Languages",
@@ -57,8 +57,9 @@ export default function CreateAcc() {
       return;
     }
 
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    // Email validation
+    const emailRegex =
+      /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailRegex.test(Email.trim())) {
       Alert.alert(
@@ -68,6 +69,7 @@ export default function CreateAcc() {
       return;
     }
 
+    // Password validation
     if (password.length < 8) {
       Alert.alert(
         "Invalid Password",
@@ -80,109 +82,84 @@ export default function CreateAcc() {
 
     try {
       /*
-       * GET LANGUAGES
+       * Create the account.
        *
-       * The backend requires language IDs when registering,
-       * but the Picker currently stores language names.
-       */
-      const languagesResponse = await api.get("/languages");
-
-      const languages = languagesResponse.data;
-
-      /*
-       * The API documentation only says GET /languages returns
-       * all languages. Depending on the backend response shape,
-       * it may be either an array or an object containing an array.
-       */
-      const languageList = Array.isArray(languages)
-        ? languages
-        : languages.languages || [];
-
-      const nativeLanguage = languageList.find(
-        (language: any) =>
-          language.name?.toLowerCase() === nativeLang.toLowerCase() ||
-          language.languageName?.toLowerCase() === nativeLang.toLowerCase()
-      );
-
-      const learningLanguage = languageList.find(
-        (language: any) =>
-          language.name?.toLowerCase() === learnLang.toLowerCase() ||
-          language.languageName?.toLowerCase() === learnLang.toLowerCase()
-      );
-
-      if (!nativeLanguage || !learningLanguage) {
-        Alert.alert(
-          "Language Error",
-          "Could not find the selected languages."
-        );
-        return;
-      }
-
-      const nativeLanguageId =
-        nativeLanguage.id ?? nativeLanguage.languageId;
-
-      const learningLanguageId =
-        learningLanguage.id ?? learningLanguage.languageId;
-
-      if (!nativeLanguageId || !learningLanguageId) {
-        Alert.alert(
-          "Language Error",
-          "The selected languages do not have valid IDs."
-        );
-        return;
-      }
-
-      /*
-       * REGISTER
+       * api.ts should already contain /api/v1
+       * in its baseURL, so we only use /auth/register here.
        */
       const response = await api.post(
-        "/api/v1/auth/register",
+        "/auth/register",
         {
           username: userName.trim(),
           email: Email.trim(),
-          password,
-          nativeLanguageId,
-          learningLanguageId,
+          password: password,
+
+          displayName: displayName.trim(),
+          bio: bio.trim(),
+
+          nativeLanguage: nativeLang,
+          learningLanguage: learnLang,
         }
       );
 
-      console.log("REGISTER SUCCESS:", response.data);
+      console.log(
+        "REGISTER SUCCESS:",
+        response.data
+      );
 
+      /*
+       * IMPORTANT:
+       *
+       * The account has already been created
+       * successfully at this point.
+       *
+       * Now send the user to LOGIN.
+       */
       Alert.alert(
         "Account Created",
         "Your account has been created successfully.",
         [
           {
             text: "Log In",
-            onPress: () => router.replace("/login"),
+            onPress: () => {
+              router.replace("/login");
+            },
           },
         ]
       );
     } catch (error: any) {
       console.log(
         "REGISTER ERROR:",
-        error?.response?.data || error?.message
+        error?.response?.data ||
+          error?.message ||
+          error
       );
 
-      const status = error?.response?.status;
+      const status =
+        error?.response?.status;
+
       const message =
         error?.response?.data?.message ||
-        error?.response?.data?.errorMessage;
+        error?.response?.data?.errorMessage ||
+        error?.response?.data?.error;
 
       if (status === 409) {
         Alert.alert(
           "Account Already Exists",
-          message || "This email already exists."
+          message ||
+            "This email or username already exists."
         );
       } else if (status === 400) {
         Alert.alert(
           "Registration Failed",
-          message || "Please check your information."
+          message ||
+            "Please check your information."
         );
       } else {
         Alert.alert(
           "Registration Failed",
-          message || "Something went wrong. Please try again."
+          message ||
+            "Something went wrong. Please try again."
         );
       }
     } finally {
@@ -193,15 +170,22 @@ export default function CreateAcc() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : "height"
+      }
     >
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.card}>
-          <Text style={styles.title}>Create Account</Text>
+          <Text style={styles.title}>
+            Create Account
+          </Text>
 
+          {/* USERNAME */}
           <TextInput
             style={styles.input}
             placeholder="Username"
@@ -209,8 +193,10 @@ export default function CreateAcc() {
             value={userName}
             onChangeText={setUserName}
             autoCapitalize="none"
+            autoCorrect={false}
           />
 
+          {/* EMAIL */}
           <TextInput
             style={styles.input}
             placeholder="Email"
@@ -219,8 +205,10 @@ export default function CreateAcc() {
             onChangeText={setEmail}
             keyboardType="email-address"
             autoCapitalize="none"
+            autoCorrect={false}
           />
 
+          {/* PASSWORD */}
           <TextInput
             style={styles.input}
             placeholder="Password"
@@ -229,8 +217,10 @@ export default function CreateAcc() {
             onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
+            autoCorrect={false}
           />
 
+          {/* DISPLAY NAME */}
           <TextInput
             style={styles.input}
             placeholder="Display Name"
@@ -239,8 +229,12 @@ export default function CreateAcc() {
             onChangeText={setDisplayName}
           />
 
+          {/* BIO */}
           <TextInput
-            style={[styles.input, styles.bioInput]}
+            style={[
+              styles.input,
+              styles.bioInput,
+            ]}
             placeholder="Bio"
             placeholderTextColor="#8B6B6F"
             value={bio}
@@ -248,46 +242,93 @@ export default function CreateAcc() {
             multiline
           />
 
+          {/* NATIVE LANGUAGE */}
           <View style={styles.pickerContainer}>
             <Picker
               selectedValue={nativeLang}
-              onValueChange={(value) => setNativeLang(value)}
+              onValueChange={(value) =>
+                setNativeLang(value)
+              }
             >
               <Picker.Item
                 label="Native Language"
                 value=""
               />
-              <Picker.Item label="English" value="English" />
-              <Picker.Item label="Turkish" value="Turkish" />
-              <Picker.Item label="Arabic" value="Arabic" />
-              <Picker.Item label="German" value="German" />
-              <Picker.Item label="French" value="French" />
-              <Picker.Item label="Spanish" value="Spanish" />
+
+              <Picker.Item
+                label="English"
+                value="ENGLISH"
+              />
+
+              <Picker.Item
+                label="Turkish"
+                value="TURKISH"
+              />
+
+              <Picker.Item
+                label="Arabic"
+                value="ARABIC"
+              />
+
+              <Picker.Item
+                label="French"
+                value="FRENCH"
+              />
+
+              <Picker.Item
+                label="Spanish"
+                value="SPANISH"
+              />
             </Picker>
           </View>
 
+          {/* LEARNING LANGUAGE */}
           <View style={styles.pickerContainer}>
             <Picker
               selectedValue={learnLang}
-              onValueChange={(value) => setLearnLang(value)}
+              onValueChange={(value) =>
+                setLearnLang(value)
+              }
             >
               <Picker.Item
                 label="Language to Learn"
                 value=""
               />
-              <Picker.Item label="English" value="English" />
-              <Picker.Item label="Turkish" value="Turkish" />
-              <Picker.Item label="Arabic" value="Arabic" />
-              <Picker.Item label="German" value="German" />
-              <Picker.Item label="French" value="French" />
-              <Picker.Item label="Spanish" value="Spanish" />
+
+              <Picker.Item
+                label="English"
+                value="ENGLISH"
+              />
+
+              <Picker.Item
+                label="Turkish"
+                value="TURKISH"
+              />
+
+              <Picker.Item
+                label="Arabic"
+                value="ARABIC"
+              />
+
+              <Picker.Item
+                label="French"
+                value="FRENCH"
+              />
+
+              <Picker.Item
+                label="Spanish"
+                value="SPANISH"
+              />
             </Picker>
           </View>
 
+          {/* CREATE ACCOUNT */}
           <Pressable
             style={({ pressed }) => [
               styles.button,
-              pressed && { opacity: 0.8 },
+              pressed && {
+                opacity: 0.8,
+              },
             ]}
             onPress={handleCreateAccount}
             disabled={loading}
@@ -304,8 +345,11 @@ export default function CreateAcc() {
             )}
           </Pressable>
 
+          {/* LOGIN */}
           <TouchableOpacity
-            onPress={() => router.push("/login")}
+            onPress={() =>
+              router.push("/login")
+            }
             style={styles.loginButton}
           >
             <Text style={styles.loginText}>

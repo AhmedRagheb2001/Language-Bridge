@@ -1,722 +1,1005 @@
-
+import React, { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  View,
-  Pressable,
-  Image,
   TextInput,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
+  View,
 } from "react-native";
 
-import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
-import * as ImagePicker from "expo-image-picker";
-
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Picker } from "@react-native-picker/picker";
+import { useFocusEffect, useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import api from "@/services/api";
 
-export default function Edit() {
+type Profile = {
+  id?: string;
+  displayName?: string;
+  bio?: string;
+  profilePictureUrl?: string | null;
+  nativeLanguage?: string;
+  learningLanguage?: string;
+};
+
+type User = {
+  id?: string;
+  username?: string;
+  email?: string;
+  profile?: Profile;
+};
+
+const LANGUAGES = [
+  {
+    label: "English",
+    value: "ENGLISH",
+  },
+  {
+    label: "Spanish",
+    value: "SPANISH",
+  },
+  {
+    label: "French",
+    value: "FRENCH",
+  },
+  {
+    label: "Arabic",
+    value: "ARABIC",
+  },
+  {
+    label: "Turkish",
+    value: "TURKISH",
+  },
+] as const;
+
+export default function Settings() {
   const router = useRouter();
+
+  const [user, setUser] = useState<User | null>(null);
+
+  const [displayName, setDisplayName] = useState("");
+  const [bio, setBio] = useState("");
+
+  const [nativeLanguage, setNativeLanguage] = useState<string | null>(
+    null
+  );
+
+  const [learningLanguage, setLearningLanguage] = useState<string | null>(
+    null
+  );
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  const [profileImage, setProfileImage] = useState<string | null>(null);
+  // =========================================================
+  // FETCH PROFILE
+  // =========================================================
 
-  const [username, setUsername] = useState("");
-  const [displayName, setDisplayName] = useState("");
+  const fetchProfile = useCallback(async () => {
+    try {
+      setLoading(true);
 
-  const [nativeLanguage, setNativeLanguage] = useState("");
-  const [learnedLanguage, setLearnedLanguage] = useState("");
+      const response = await api.get("/auth/me");
 
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+      const currentUser: User = response?.data ?? null;
 
-  // Get current profile information
-  useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const response = await api.get("/me");
-        const user = response.data;
-
-        setUsername(user.username ?? "");
-        setDisplayName(user.displayName ?? "");
-        setProfileImage(user.profilePicture ?? null);
-
-        setNativeLanguage(user.nativeLanguage ?? "");
-        setLearnedLanguage(user.learnedLanguage ?? "");
-      } catch (error) {
-        console.log("Error fetching profile:", error);
-
-        Alert.alert(
-          "Error",
-          "Could not load your profile."
-        );
-      } finally {
-        setLoading(false);
+      if (!currentUser) {
+        setUser(null);
+        return;
       }
-    };
 
-    fetchProfile();
+      setUser(currentUser);
+
+      const profile = currentUser.profile;
+
+      setDisplayName(profile?.displayName ?? "");
+      setBio(profile?.bio ?? "");
+
+      setNativeLanguage(profile?.nativeLanguage ?? null);
+      setLearningLanguage(profile?.learningLanguage ?? null);
+    } catch (error: any) {
+      console.log(
+        "Settings profile error:",
+        error?.response?.data ||
+          error?.message ||
+          error
+      );
+
+      Alert.alert(
+        "Error",
+        error?.response?.data?.message ||
+          error?.response?.data?.errorMeassge ||
+          "Could not load your profile."
+      );
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  // Pick profile picture
-  const handlePickImage = async () => {
-    const permission =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
+  // =========================================================
+  // LOAD SETTINGS WHEN SCREEN GETS FOCUS
+  // =========================================================
 
-    if (!permission.granted) {
-      Alert.alert(
-        "Permission required",
-        "Please allow access to your photos."
-      );
-      return;
-    }
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfile();
+    }, [fetchProfile])
+  );
 
-    const result =
-      await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 1,
-      });
+  // =========================================================
+  // BACK BUTTON
+  // =========================================================
 
-    if (!result.canceled) {
-      setProfileImage(result.assets[0].uri);
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace("/");
     }
   };
 
-  const handleLogout = async () => { try { await AsyncStorage.removeItem("accessToken"); router.replace("/login"); } catch (error) { console.log("Logout error:", error); Alert.alert( "Error", "Could not log out." ); } };
+  // =========================================================
+  // LOGOUT
+  // =========================================================
 
-  // Save changes
+  const handleLogout = () => {
+    if (loggingOut) {
+      return;
+    }
+
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to log out?",
+      [
+        {
+          text: "No",
+          style: "cancel",
+        },
+        {
+          text: "Yes",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setLoggingOut(true);
+
+              await AsyncStorage.removeItem("accessToken");
+
+              router.replace("/");
+            } catch (error) {
+              console.log("Logout error:", error);
+
+              Alert.alert(
+                "Error",
+                "Could not log you out. Please try again."
+              );
+
+              setLoggingOut(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // =========================================================
+  // SAVE PROFILE
+  // =========================================================
+
   const handleSave = async () => {
-    if (!username.trim()) {
-      Alert.alert("Error", "Username cannot be empty.");
+    if (saving) {
       return;
     }
 
-    if (!displayName.trim()) {
-      Alert.alert("Error", "Display name cannot be empty.");
-      return;
-    }
+    const trimmedDisplayName = displayName.trim();
+    const trimmedBio = bio.trim();
 
-    if (!nativeLanguage || !learnedLanguage) {
+    // -------------------------------------------------------
+    // DISPLAY NAME VALIDATION
+    // -------------------------------------------------------
+
+    if (!trimmedDisplayName) {
       Alert.alert(
         "Error",
-        "Please select both languages."
+        "Please enter your display name."
       );
       return;
     }
 
-    if (password.length > 0) {
-      if (password.length < 6) {
-        Alert.alert(
-          "Error",
-          "Password must be at least 6 characters."
-        );
-        return;
-      }
+    if (trimmedDisplayName.length < 7) {
+      Alert.alert(
+        "Error",
+        "Display name must be at least 7 characters long."
+      );
+      return;
+    }
 
-      if (password !== confirmPassword) {
-        Alert.alert(
-          "Error",
-          "Passwords do not match."
-        );
-        return;
-      }
+    if (trimmedDisplayName.length > 30) {
+      Alert.alert(
+        "Error",
+        "Display name cannot be longer than 30 characters."
+      );
+      return;
+    }
+
+    // -------------------------------------------------------
+    // BIO VALIDATION
+    // -------------------------------------------------------
+
+    if (trimmedBio.length > 500) {
+      Alert.alert(
+        "Error",
+        "Bio cannot be longer than 500 characters."
+      );
+      return;
+    }
+
+    // -------------------------------------------------------
+    // LANGUAGE VALIDATION
+    // -------------------------------------------------------
+
+    if (!nativeLanguage) {
+      Alert.alert(
+        "Error",
+        "Please select your native language."
+      );
+      return;
+    }
+
+    if (!learningLanguage) {
+      Alert.alert(
+        "Error",
+        "Please select your learning language."
+      );
+      return;
+    }
+
+    if (nativeLanguage === learningLanguage) {
+      Alert.alert(
+        "Error",
+        "Native language and learning language cannot be the same."
+      );
+      return;
     }
 
     try {
       setSaving(true);
 
-      const data: any = {
-        username: username.trim(),
-        displayName: displayName.trim(),
-        nativeLanguage,
-        learnedLanguage,
-      };
+      const response = await api.patch(
+        "/profiles/me",
+        {
+          displayName: trimmedDisplayName,
+          bio: trimmedBio,
+          nativeLanguage,
+          learningLanguage,
+        }
+      );
 
-      // Only send password if user entered one
-      if (password.length > 0) {
-        data.password = password;
-      }
+      console.log(
+        "PROFILE UPDATE RESPONSE:",
+        response?.data
+      );
 
-      /*
-        NOTE:
+      // Update local user immediately
+      setUser((currentUser) => {
+        if (!currentUser) {
+          return currentUser;
+        }
 
-        profileImage is currently only changed locally.
-
-        If your backend has an image-upload endpoint,
-        we can add the upload here later.
-      */
-
-      await api.patch("/me", data);
+        return {
+          ...currentUser,
+          profile: {
+            ...currentUser.profile,
+            displayName: trimmedDisplayName,
+            bio: trimmedBio,
+            nativeLanguage,
+            learningLanguage,
+          },
+        };
+      });
 
       Alert.alert(
         "Success",
-        "Your profile has been updated.",
-        [
-          {
-            text: "OK",
-            onPress: () => router.back(),
-          },
-        ]
+        "Your profile has been updated successfully."
       );
-    } catch (error) {
-      console.log("Error updating profile:", error);
+    } catch (error: any) {
+      console.log(
+        "Update profile error:",
+        error?.response?.data ||
+          error?.message ||
+          error
+      );
 
       Alert.alert(
         "Error",
-        "Could not update your profile."
+        error?.response?.data?.message ||
+          error?.response?.data?.errorMeassge ||
+          "Could not update your profile."
       );
     } finally {
       setSaving(false);
     }
   };
 
+  // =========================================================
+  // LOADING
+  // =========================================================
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
+      <SafeAreaView
+        style={styles.loadingContainer}
+      >
         <ActivityIndicator
           size="large"
-          color="#63272e"
+          color="#FDF5E6"
         />
       </SafeAreaView>
     );
   }
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+  // =========================================================
+  // UI
+  // =========================================================
 
+  return (
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.keyboardContainer}
+        behavior={
+          Platform.OS === "ios"
+            ? "padding"
+            : undefined
+        }
+      >
+        {/* ================================================= */}
         {/* HEADER */}
+        {/* ================================================= */}
 
         <View style={styles.header}>
-
           <Pressable
-            onPress={() => router.back()}
+            onPress={handleBack}
             style={styles.backButton}
+            hitSlop={10}
           >
-            <Text style={styles.backText}>
-              {"<"}
-            </Text>
+            <Ionicons
+              name="chevron-back"
+              size={29}
+              color="#FDF5E6"
+            />
           </Pressable>
 
-          <Text style={styles.headerText}>
-            Edit Profile
+          <Text style={styles.headerTitle}>
+            Settings
           </Text>
-
-          <View style={styles.headerSpace} />
-
         </View>
 
+        {/* ================================================= */}
+        {/* CONTENT */}
+        {/* ================================================= */}
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={
+            styles.scrollContent
+          }
         >
+          {/* ================================================= */}
+          {/* ACCOUNT INFORMATION */}
+          {/* ================================================= */}
 
-          {/* PROFILE PICTURE */}
-
-          <Pressable
-            style={styles.picContainer}
-            onPress={handlePickImage}
-          >
-
-            {profileImage ? (
-
-              <Image
-                source={{
-                  uri: profileImage,
-                }}
-                style={styles.profileImage}
-              />
-
-            ) : (
-
-              <>
-                <View style={styles.oneDraw} />
-                <View style={styles.twoDraw} />
-              </>
-
-            )}
-
-          </Pressable>
-
-
-          <Pressable
-            onPress={handlePickImage}
-          >
-            <Text style={styles.changePhoto}>
-              Change Profile Picture
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Account Information
             </Text>
-          </Pressable>
 
+            <View style={styles.infoCard}>
+              {/* USERNAME */}
 
-          {/* USERNAME */}
+              <View style={styles.infoRow}>
+                <Ionicons
+                  name="person-outline"
+                  size={21}
+                  color="#63272e"
+                />
 
-          <Text style={styles.label}>
-            Username
-          </Text>
+                <View
+                  style={
+                    styles.infoTextContainer
+                  }
+                >
+                  <Text style={styles.infoLabel}>
+                    Username
+                  </Text>
 
-          <TextInput
-            value={username}
-            onChangeText={setUsername}
-            placeholder="Username"
-            placeholderTextColor="#999"
-            style={styles.input}
-            autoCapitalize="none"
-          />
+                  <Text style={styles.infoValue}>
+                    {user?.username ||
+                      "Username"}
+                  </Text>
+                </View>
+              </View>
 
+              <View style={styles.divider} />
 
-          {/* DISPLAY NAME */}
+              {/* EMAIL */}
 
-          <Text style={styles.label}>
-            Display Name
-          </Text>
+              <View style={styles.infoRow}>
+                <Ionicons
+                  name="mail-outline"
+                  size={21}
+                  color="#63272e"
+                />
 
-          <TextInput
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder="Display Name"
-            placeholderTextColor="#999"
-            style={styles.input}
-          />
+                <View
+                  style={
+                    styles.infoTextContainer
+                  }
+                >
+                  <Text style={styles.infoLabel}>
+                    Email
+                  </Text>
 
-
-          {/* NATIVE LANGUAGE */}
-
-          <Text style={styles.label}>
-            Native Language
-          </Text>
-
-          <View style={styles.pickerContainer}>
-
-            <Picker
-              selectedValue={nativeLanguage}
-              onValueChange={(value) =>
-                setNativeLanguage(value)
-              }
-              style={styles.picker}
-            >
-
-              <Picker.Item
-                label="Select Native Language"
-                value=""
-              />
-
-              <Picker.Item
-                label="English"
-                value="English"
-              />
-
-              <Picker.Item
-                label="Turkish"
-                value="Turkish"
-              />
-
-              <Picker.Item
-                label="Arabic"
-                value="Arabic"
-              />
-
-              <Picker.Item
-                label="French"
-                value="French"
-              />
-
-              <Picker.Item
-                label="Spanish"
-                value="Spanish"
-              />
-
-              <Picker.Item
-                label="German"
-                value="German"
-              />
-
-            </Picker>
-
+                  <Text style={styles.infoValue}>
+                    {user?.email || "Email"}
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
 
+          {/* ================================================= */}
+          {/* PROFILE INFORMATION */}
+          {/* ================================================= */}
 
-          {/* LEARNED LANGUAGE */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Profile Information
+            </Text>
 
-          <Text style={styles.label}>
-            Learned Language
-          </Text>
+            {/* DISPLAY NAME */}
 
-          <View style={styles.pickerContainer}>
-
-            <Picker
-              selectedValue={learnedLanguage}
-              onValueChange={(value) =>
-                setLearnedLanguage(value)
-              }
-              style={styles.picker}
-            >
-
-              <Picker.Item
-                label="Select Learned Language"
-                value=""
-              />
-
-              <Picker.Item
-                label="English"
-                value="English"
-              />
-
-              <Picker.Item
-                label="Turkish"
-                value="Turkish"
-              />
-
-              <Picker.Item
-                label="Arabic"
-                value="Arabic"
-              />
-
-              <Picker.Item
-                label="French"
-                value="French"
-              />
-
-              <Picker.Item
-                label="Spanish"
-                value="Spanish"
-              />
-
-              <Picker.Item
-                label="German"
-                value="German"
-              />
-
-            </Picker>
-
-          </View>
-
-
-          {/* PASSWORD */}
-
-          <Text style={styles.label}>
-            New Password
-          </Text>
-
-          <TextInput
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Leave empty to keep current password"
-            placeholderTextColor="#999"
-            style={styles.input}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-
-
-          {/* CONFIRM PASSWORD */}
-
-          <Text style={styles.label}>
-            Confirm New Password
-          </Text>
-
-          <TextInput
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            placeholder="Confirm new password"
-            placeholderTextColor="#999"
-            style={styles.input}
-            secureTextEntry
-            autoCapitalize="none"
-          />
-
-
-          {/* SAVE BUTTON */}
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.saveButton,
-              pressed && { opacity: 0.8 },
-            ]}
-            onPress={handleSave}
-            disabled={saving}
-          >
-
-            {saving ? (
-
-              <ActivityIndicator
-                color="#FDF5E6"
-              />
-
-            ) : (
-
-              <Text style={styles.saveText}>
-                Save Changes
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>
+                Display Name
               </Text>
 
-            )}
+              <View style={styles.inputWrapper}>
+                <Ionicons
+                  name="person-circle-outline"
+                  size={21}
+                  color="#63272e"
+                />
 
-          </Pressable>
+                <TextInput
+                  value={displayName}
+                  onChangeText={
+                    setDisplayName
+                  }
+                  placeholder="Enter your display name"
+                  placeholderTextColor="#a88e90"
+                  style={styles.input}
+                  maxLength={30}
+                  autoCapitalize="words"
+                />
+              </View>
 
+              <Text style={styles.characterCount}>
+                {displayName.length}/30
+              </Text>
+            </View>
 
-          {/* CANCEL */}
+            {/* BIO */}
 
-          <Pressable
-            style={styles.cancelButton}
-            onPress={() => router.back()}
-          >
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>
+                Bio
+              </Text>
 
-            <Text style={styles.cancelText}>
-              Cancel
+              <View
+                style={[
+                  styles.inputWrapper,
+                  styles.bioInputWrapper,
+                ]}
+              >
+                <Ionicons
+                  name="information-circle-outline"
+                  size={21}
+                  color="#63272e"
+                  style={styles.bioIcon}
+                />
+
+                <TextInput
+                  value={bio}
+                  onChangeText={setBio}
+                  placeholder="Tell people a little about yourself..."
+                  placeholderTextColor="#a88e90"
+                  style={[
+                    styles.input,
+                    styles.bioInput,
+                  ]}
+                  multiline
+                  textAlignVertical="top"
+                  maxLength={500}
+                />
+              </View>
+
+              <Text style={styles.characterCount}>
+                {bio.length}/500
+              </Text>
+            </View>
+          </View>
+
+          {/* ================================================= */}
+          {/* LANGUAGES */}
+          {/* ================================================= */}
+
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              Languages
             </Text>
 
-          </Pressable>
+            {/* NATIVE LANGUAGE */}
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>
+                Native Language
+              </Text>
+
+              <View style={styles.pickerWrapper}>
+                <Ionicons
+                  name="language-outline"
+                  size={21}
+                  color="#63272e"
+                />
+
+                <Picker
+                  selectedValue={
+                    nativeLanguage
+                  }
+                  onValueChange={(value) => {
+                    if (
+                      value === null ||
+                      value === ""
+                    ) {
+                      setNativeLanguage(
+                        null
+                      );
+                      return;
+                    }
+
+                    setNativeLanguage(
+                      String(value)
+                    );
+                  }}
+                  style={styles.picker}
+                  dropdownIconColor="#63272e"
+                >
+                  <Picker.Item
+                    label="Select native language"
+                    value={null}
+                  />
+
+                  {LANGUAGES.map(
+                    (language) => (
+                      <Picker.Item
+                        key={
+                          language.value
+                        }
+                        label={
+                          language.label
+                        }
+                        value={
+                          language.value
+                        }
+                      />
+                    )
+                  )}
+                </Picker>
+              </View>
+            </View>
+
+            {/* LEARNING LANGUAGE */}
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>
+                Learning Language
+              </Text>
+
+              <View style={styles.pickerWrapper}>
+                <Ionicons
+                  name="book-outline"
+                  size={21}
+                  color="#63272e"
+                />
+
+                <Picker
+                  selectedValue={
+                    learningLanguage
+                  }
+                  onValueChange={(value) => {
+                    if (
+                      value === null ||
+                      value === ""
+                    ) {
+                      setLearningLanguage(
+                        null
+                      );
+                      return;
+                    }
+
+                    setLearningLanguage(
+                      String(value)
+                    );
+                  }}
+                  style={styles.picker}
+                  dropdownIconColor="#63272e"
+                >
+                  <Picker.Item
+                    label="Select learning language"
+                    value={null}
+                  />
+
+                  {LANGUAGES.map(
+                    (language) => (
+                      <Picker.Item
+                        key={
+                          language.value
+                        }
+                        label={
+                          language.label
+                        }
+                        value={
+                          language.value
+                        }
+                      />
+                    )
+                  )}
+                </Picker>
+              </View>
+            </View>
+          </View>
+
+          {/* ================================================= */}
+          {/* SAVE BUTTON */}
+          {/* ================================================= */}
 
           <Pressable
-  style={({ pressed }) => [
-    styles.logoutButton,
-    pressed && { opacity: 0.8 },
-  ]}
-  onPress={handleLogout}
->
-  <Text style={styles.logoutText}>
-    Log Out
-  </Text>
-</Pressable>
+            onPress={handleSave}
+            disabled={saving}
+            style={[
+              styles.saveButton,
+              saving &&
+                styles.disabledButton,
+            ]}
+          >
+            {saving ? (
+              <ActivityIndicator
+                size="small"
+                color="#FDF5E6"
+              />
+            ) : (
+              <>
+                <Ionicons
+                  name="checkmark-circle-outline"
+                  size={21}
+                  color="#FDF5E6"
+                />
 
+                <Text
+                  style={
+                    styles.saveButtonText
+                  }
+                >
+                  Save Changes
+                </Text>
+              </>
+            )}
+          </Pressable>
+
+          {/* ================================================= */}
+          {/* LOGOUT BUTTON */}
+          {/* ================================================= */}
+
+          <Pressable
+            style={[
+              styles.logoutButton,
+              loggingOut &&
+                styles.disabledLogoutButton,
+            ]}
+            onPress={handleLogout}
+            disabled={loggingOut}
+          >
+            {loggingOut ? (
+              <ActivityIndicator
+                size="small"
+                color="#63272e"
+              />
+            ) : (
+              <>
+                <Ionicons
+                  name="log-out-outline"
+                  size={21}
+                  color="#63272e"
+                />
+
+                <Text
+                  style={
+                    styles.logoutButtonText
+                  }
+                >
+                  Logout
+                </Text>
+              </>
+            )}
+          </Pressable>
+
+          <View style={styles.bottomSpace} />
         </ScrollView>
-
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
-
-
-
-
   );
 }
 
+// =========================================================
+// STYLES
+// =========================================================
 
 const styles = StyleSheet.create({
-
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#FDF5E6",
-  },
-
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#FDF5E6",
-  },
-
   container: {
     flex: 1,
     backgroundColor: "#FDF5E6",
   },
 
-  header: {
-    flexDirection: "row",
+  keyboardContainer: {
+    flex: 1,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: "#63272e",
+    justifyContent: "center",
     alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 10,
+  },
+
+  // =======================================================
+  // HEADER
+  // =======================================================
+
+  header: {
+    height: 90,
+    backgroundColor: "#63272e",
+    justifyContent: "center",
+    alignItems: "center",
+    position: "relative",
+    borderBottomLeftRadius: 40,
+    borderBottomRightRadius: 40,
+  },
+
+  headerTitle: {
+    color: "#FDF5E6",
+    fontSize: 21,
+    fontWeight: "700",
   },
 
   backButton: {
-    width: 45,
-    height: 45,
+    position: "absolute",
+    left: 20,
+    width: 40,
+    height: 40,
     borderWidth: 2,
-    borderColor: "#63272e",
+    borderColor: "#FDF5E6",
     borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
   },
 
-  backText: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#63272e",
-  },
-
-  headerText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#63272e",
-  },
-
-  headerSpace: {
-    width: 45,
-  },
+  // =======================================================
+  // SCROLL
+  // =======================================================
 
   scrollContent: {
-    paddingHorizontal: 20,
+    paddingTop: 22,
     paddingBottom: 40,
   },
 
-  picContainer: {
-    width: 140,
-    height: 140,
+  // =======================================================
+  // SECTIONS
+  // =======================================================
 
-    borderWidth: 2,
-    borderColor: "#63272e",
+  section: {
+    marginHorizontal: 16,
+    marginBottom: 24,
+  },
 
-    borderRadius: 70,
+  sectionTitle: {
+    color: "#63272e",
+    fontSize: 19,
+    fontWeight: "700",
+    marginBottom: 11,
+  },
 
-    alignSelf: "center",
+  // =======================================================
+  // ACCOUNT INFO
+  // =======================================================
 
-    marginTop: 10,
+  infoCard: {
+    backgroundColor: "#fffaf0",
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "#eadbc5",
+    paddingHorizontal: 16,
+  },
 
+  infoRow: {
+    flexDirection: "row",
     alignItems: "center",
-
-    justifyContent: "flex-start",
-
-    overflow: "hidden",
+    paddingVertical: 15,
   },
 
-  profileImage: {
-    width: "100%",
-    height: "100%",
+  infoTextContainer: {
+    marginLeft: 12,
+    flex: 1,
   },
 
-  oneDraw: {
-    width: 45,
-    height: 45,
-
-    borderRadius: 23,
-
-    backgroundColor: "#63272e",
-
-    marginTop: 20,
+  infoLabel: {
+    color: "#8d6d70",
+    fontSize: 12,
+    fontWeight: "600",
+    marginBottom: 3,
   },
 
-  twoDraw: {
-    width: 90,
-    height: 70,
-
-    borderTopLeftRadius: 45,
-    borderTopRightRadius: 45,
-
-    backgroundColor: "#63272e",
-
-    marginTop: 8,
-  },
-
-  changePhoto: {
-    alignSelf: "center",
-    marginTop: 10,
-
+  infoValue: {
+    color: "#63272e",
     fontSize: 15,
-    fontWeight: "bold",
-
-    color: "#63272e",
+    fontWeight: "600",
   },
 
-  label: {
-    fontSize: 17,
-    fontWeight: "bold",
+  divider: {
+    height: 1,
+    backgroundColor: "#eadbc5",
+  },
 
+  // =======================================================
+  // INPUTS
+  // =======================================================
+
+  inputContainer: {
+    marginBottom: 16,
+  },
+
+  inputLabel: {
     color: "#63272e",
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 7,
+  },
 
-    marginTop: 20,
-    marginBottom: 8,
+  inputWrapper: {
+    minHeight: 50,
+    backgroundColor: "#fffaf0",
+    borderWidth: 1,
+    borderColor: "#eadbc5",
+    borderRadius: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 13,
   },
 
   input: {
-    height: 52,
-
-    borderWidth: 2,
-    borderColor: "#63272e",
-
-    borderRadius: 15,
-
-    backgroundColor: "#63272e",
-
-    paddingHorizontal: 15,
-
-    color: "#FDF5E6",
-
-    fontSize: 16,
+    flex: 1,
+    color: "#4f3c3e",
+    fontSize: 15,
+    marginLeft: 9,
+    paddingVertical: 11,
   },
 
-  pickerContainer: {
-    borderWidth: 2,
-    borderColor: "#63272e",
+  bioInputWrapper: {
+    minHeight: 125,
+    alignItems: "flex-start",
+    paddingTop: 13,
+  },
 
-    borderRadius: 15,
+  bioIcon: {
+    marginTop: 1,
+  },
 
-    backgroundColor: "#63272e",
+  bioInput: {
+    minHeight: 100,
+  },
 
+  characterCount: {
+    color: "#8d6d70",
+    fontSize: 11,
+    textAlign: "right",
+    marginTop: 4,
+  },
+
+  // =======================================================
+  // PICKERS
+  // =======================================================
+
+  pickerWrapper: {
+    height: 52,
+    backgroundColor: "#fffaf0",
+    borderWidth: 1,
+    borderColor: "#eadbc5",
+    borderRadius: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingLeft: 13,
     overflow: "hidden",
   },
 
   picker: {
-    color: "#FDF5E6",
-    height: 55,
+    flex: 1,
+    color: "#63272e",
+    height: 52,
   },
+
+  // =======================================================
+  // SAVE
+  // =======================================================
 
   saveButton: {
-    height: 55,
-
+    marginHorizontal: 16,
+    height: 49,
+    borderRadius: 13,
     backgroundColor: "#63272e",
-
-    borderRadius: 18,
-
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
-
-    marginTop: 30,
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 14,
   },
 
-  saveText: {
+  disabledButton: {
+    opacity: 0.65,
+  },
+
+  saveButtonText: {
     color: "#FDF5E6",
-
-    fontSize: 18,
-
-    fontWeight: "bold",
+    fontSize: 16,
+    fontWeight: "700",
   },
 
-  cancelButton: {
-    height: 55,
+  // =======================================================
+  // LOGOUT
+  // =======================================================
 
-    borderWidth: 2,
+  logoutButton: {
+    marginHorizontal: 16,
+    minHeight: 48,
+    borderRadius: 13,
+    backgroundColor: "#fffaf0",
+    borderWidth: 1,
     borderColor: "#63272e",
-
-    borderRadius: 18,
-
-    justifyContent: "center",
+    flexDirection: "row",
     alignItems: "center",
-
-    marginTop: 12,
-  },
-
-  cancelText: {
-    color: "#63272e",
-
-    fontSize: 18,
-
-    fontWeight: "bold",
-  },
-logoutButton: { 
-  height: 55,
-   borderWidth: 2,
-    borderColor: "#63272e", 
-    borderRadius: 18, 
     justifyContent: "center",
-     alignItems: "center",
-      marginTop: 25,
-       marginBottom: 20,
-        backgroundColor: "#FDF5E6",
-      
-      },
-      
-      logoutText: {
-         color: "#63272e",
-          fontSize: 18,
-           fontWeight: "bold", },
+    paddingHorizontal: 15,
+    marginTop: 4,
+  },
+
+  disabledLogoutButton: {
+    opacity: 0.65,
+  },
+
+  logoutButtonText: {
+    color: "#63272e",
+    fontSize: 15,
+    fontWeight: "700",
+    marginLeft: 8,
+  },
+
+  bottomSpace: {
+    height: 20,
+  },
 });

@@ -1,24 +1,24 @@
 
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  ScrollView,
-  Pressable,
   ActivityIndicator,
-  TouchableOpacity,
+  Alert,
   KeyboardAvoidingView,
   Platform,
-  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
-import { useState } from "react";
-import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useRouter } from "expo-router";
+import { useState } from "react";
 
-import api from "../../services/api";
+import api from "@/services/api";
 
 export default function Login() {
   const router = useRouter();
@@ -61,10 +61,12 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await api.post("/api/v1/auth/login", {
+      const response = await api.post("/auth/login", {
         email: email.trim(),
         password,
       });
+
+      console.log("LOGIN RESPONSE:", response.data);
 
       const { accessToken, refreshToken, user } = response.data;
 
@@ -72,33 +74,48 @@ export default function Login() {
         throw new Error("No access token received.");
       }
 
-      // Save tokens for protected API requests
-      await AsyncStorage.setItem("accessToken", accessToken);
+      // Save access token
+      await AsyncStorage.setItem(
+        "accessToken",
+        accessToken
+      );
 
+      // Save refresh token if the backend sends one
       if (refreshToken) {
-        await AsyncStorage.setItem("refreshToken", refreshToken);
+        await AsyncStorage.setItem(
+          "refreshToken",
+          refreshToken
+        );
       }
 
-      // Save basic user information returned by login
+      // Save user returned by the backend
       if (user) {
-        await AsyncStorage.setItem("user", JSON.stringify(user));
+        await AsyncStorage.setItem(
+          "user",
+          JSON.stringify(user)
+        );
       }
 
       console.log("LOGIN SUCCESS");
       console.log("USER:", user);
 
+      // Login is successful → go to Profile
       router.replace("/profile");
     } catch (error: any) {
       console.log(
         "LOGIN ERROR:",
-        error?.response?.data || error?.message
+        error?.response?.data ||
+          error?.message ||
+          error
       );
 
-      Alert.alert(
-        "Login Failed",
+      const message =
         error?.response?.data?.message ||
-          "Invalid email or password."
-      );
+        error?.response?.data?.errorMessage ||
+        error?.response?.data?.error ||
+        "Invalid email or password.";
+
+      Alert.alert("Login Failed", message);
     } finally {
       setLoading(false);
     }
@@ -107,14 +124,17 @@ export default function Login() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      behavior={
+        Platform.OS === "ios"
+          ? "padding"
+          : "height"
+      }
     >
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.card}>
-
           {/* EMAIL */}
           <TextInput
             style={styles.input}
@@ -143,11 +163,17 @@ export default function Login() {
             />
 
             <TouchableOpacity
-              onPress={() => setShowPassword(!showPassword)}
-              style={{ paddingLeft: 10 }}
+              onPress={() =>
+                setShowPassword(!showPassword)
+              }
+              style={styles.eyeButton}
             >
               <Ionicons
-                name={showPassword ? "eye-off" : "eye"}
+                name={
+                  showPassword
+                    ? "eye-off"
+                    : "eye"
+                }
                 size={24}
                 color="#63272e"
               />
@@ -166,12 +192,16 @@ export default function Login() {
             {loading ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.buttonText}>Log In</Text>
+              <Text style={styles.buttonText}>
+                Log In
+              </Text>
             )}
           </Pressable>
 
           {/* OR */}
-          <Text style={styles.orText}>OR</Text>
+          <Text style={styles.orText}>
+            OR
+          </Text>
 
           {/* CREATE ACCOUNT */}
           <Pressable
@@ -179,13 +209,14 @@ export default function Login() {
               styles.createAccountButton,
               pressed && { opacity: 0.8 },
             ]}
-            onPress={() => router.push("/(tabs)/createAcc")}
+            onPress={() =>
+              router.push("/(tabs)/createAcc")
+            }
           >
             <Text style={styles.createAccountText}>
               Create Account
             </Text>
           </Pressable>
-
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -241,6 +272,10 @@ const styles = StyleSheet.create({
     color: "#63272e",
   },
 
+  eyeButton: {
+    paddingLeft: 10,
+  },
+
   button: {
     width: 250,
     height: 70,
@@ -277,5 +312,6 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     textAlign: "center",
     fontSize: 16,
+    color: "#63272e",
   },
 });
